@@ -6,11 +6,23 @@ const CampaignForm = () => {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [reward, setReward] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [location, setLocation] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [tags, setTags] = useState("");
 
   const handleSubmit = async () => {
     try {
       const contract = await getContract();
-      const tx = await contract.createCampaign(title, category, reward);
+      const tx = await contract.createCampaign(
+        title,
+        category,
+        reward,
+        imageUrl,
+        location,
+        expiry,
+        tags.split(',').map(tag => tag.trim())
+      );
       await tx.wait();
       alert("Campaign created!");
     } catch (err) {
@@ -39,6 +51,31 @@ const CampaignForm = () => {
         value={reward} 
         onChange={(e) => setReward(e.target.value)} 
         placeholder="Reward" 
+      />
+      <input 
+        className="block w-full mb-2 p-2 border rounded" 
+        value={imageUrl} 
+        onChange={(e) => setImageUrl(e.target.value)} 
+        placeholder="Image URL" 
+      />
+      <input 
+        className="block w-full mb-2 p-2 border rounded" 
+        value={location} 
+        onChange={(e) => setLocation(e.target.value)} 
+        placeholder="Location"
+      />
+      <input 
+        className="block w-full mb-2 p-2 border rounded" 
+        value={tags} 
+        onChange={(e) => setTags(e.target.value)} 
+        placeholder="Tags (comma-separated)" 
+      />
+      <input 
+        type="date"
+        className="block w-full mb-4 p-2 border rounded" 
+        value={expiry} 
+        onChange={(e) => setExpiry(e.target.value)} 
+        placeholder="Expiry Date"
       />
       <button 
         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700" 

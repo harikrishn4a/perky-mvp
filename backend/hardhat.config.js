@@ -11,6 +11,12 @@ module.exports = {
       },
     },
   },
+  paths: {
+    sources: "./contracts",
+    artifacts: "./artifacts",
+    cache: "./cache",
+    tests: "./test"
+  },
   networks: {
     xrplEvm: {
       url: process.env.RPC_URL,
