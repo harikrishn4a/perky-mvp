@@ -4,17 +4,30 @@ import { getContract, getCampaignById } from '../utils/contract';
 import PopulateDataButton from './PopulateDataButton';
 import { ethers } from 'ethers';
 
-// Image component with fallback
-const ImageWithFallback = ({ src, alt, className }) => {
-  const fallbackUrl = 'https://via.placeholder.com/400x200?text=Campaign+Image';
+// Image component with category-based fallbacks
+const ImageWithFallback = ({ src, alt, className, category }) => {
+  // Define placeholder images for different categories
+  const placeholders = {
+    'Sportswear': 'https://images.unsplash.com/photo-1483721310020-03333e577078?w=800&auto=format&fit=crop&q=80',
+    'Running Shoes': 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80',
+    'Food & Beverage': 'https://images.unsplash.com/photo-1493770348161-369560ae357d?w=800&auto=format&fit=crop&q=80',
+    'Fitness': 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&auto=format&fit=crop&q=80',
+    'Dining': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&auto=format&fit=crop&q=80',
+    'Business': 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&auto=format&fit=crop&q=80',
+    'default': 'https://via.placeholder.com/400x200?text=Campaign+Image'
+  };
+  
+  const getFallbackUrl = (category) => {
+    return placeholders[category] || placeholders.default;
+  };
   
   const handleError = (e) => {
-    e.target.src = fallbackUrl;
+    e.target.src = getFallbackUrl(category);
   };
 
   return (
     <img
-      src={src || fallbackUrl}
+      src={src || getFallbackUrl(category)}
       alt={alt}
       className={`w-full object-cover ${className}`}
       onError={handleError}
@@ -54,7 +67,22 @@ const BusinessDashboard = () => {
           try {
             const campaign = await getCampaignById(i);
             if (campaign) {
-              fetchedCampaigns.push(campaign);
+              // Process campaign data
+              const processedCampaign = {
+                ...campaign,
+                id: i,
+                // Set image URL based on location or category if they contain URLs
+                imageUrl: campaign.location?.startsWith('http') 
+                  ? campaign.location 
+                  : campaign.category?.startsWith('http')
+                    ? campaign.category
+                    : 'https://via.placeholder.com/400x200?text=Campaign+Image',
+                // Set display category (if category is a URL, use a default)
+                displayCategory: campaign.category?.startsWith('http') 
+                  ? 'General' 
+                  : campaign.category
+              };
+              fetchedCampaigns.push(processedCampaign);
             }
           } catch (err) {
             console.error(`Error fetching campaign ${i}:`, err);
@@ -208,9 +236,10 @@ const BusinessDashboard = () => {
                     src={campaign.imageUrl}
                     alt={campaign.title}
                     className="h-full"
+                    category={campaign.displayCategory}
                   />
                   <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">
-                    {campaign.category}
+                    {campaign.displayCategory}
                   </div>
                 </div>
                 <div className="p-6">

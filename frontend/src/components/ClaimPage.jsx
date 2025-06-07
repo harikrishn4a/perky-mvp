@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getCampaignById, mintProof } from '../utils/contract';
+import { getCampaignById, getContract, hasUserClaimed, estimateGas, getCurrentGasPrice } from '../utils/contract';
+import { encodeMintProofData, validateAndFormatTxParams, estimateTransactionCost, decodeTransactionError } from '../utils/transaction';
+import { ethers } from 'ethers';
+import { useAccount } from 'wagmi';
 
 const ClaimPage = () => {
   const { id } = useParams();
+  const { address } = useAccount();
   const [campaign, setCampaign] = useState(null);
   const [status, setStatus] = useState('');
   const [alreadyClaimed, setAlreadyClaimed] = useState(false);
   const [error, setError] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transactionCost, setTransactionCost] = useState(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -16,29 +22,89 @@ const ClaimPage = () => {
         const data = await getCampaignById(id);
         console.log('Received campaign data:', data);
         
-        // Campaign data is already transformed by getCampaignById
         setCampaign(data);
         
-        if (data.claimed && Number(data.claimed) > 0) {
-          setAlreadyClaimed(true);
+        if (address) {
+          const claimed = await hasUserClaimed(id, address);
+          setAlreadyClaimed(claimed);
         }
+
+        // Estimate transaction cost
+        const gasLimit = await estimateGas(address || ethers.ZeroAddress, id);
+        const gasPrice = await getCurrentGasPrice();
+        const cost = await estimateTransactionCost(gasLimit, gasPrice);
+        setTransactionCost(cost);
+
       } catch (e) {
         console.error("Failed to load campaign:", e);
         setError(e.message);
       }
     };
     fetch();
-  }, [id]);
+  }, [id, address]);
 
   const handleClaim = async () => {
-    setStatus("Claiming...");
+    if (!address) {
+      setStatus("❌ Please connect your wallet first");
+      return;
+    }
+
+    setIsProcessing(true);
+    setStatus("Preparing transaction...");
+    
     try {
-      await mintProof(id);
-      setStatus("✅ Claimed successfully!");
+      // Get contract with signer
+      const contract = await getContract(true);
+      
+      // Validate and format transaction parameters
+      const txParams = await validateAndFormatTxParams({
+        to: address,
+        campaignId: id,
+        encryptedData: "0x", // Empty bytes for now
+        gasLimit: await estimateGas(address, id),
+        gasPrice: await getCurrentGasPrice()
+      });
+
+      // Encode transaction data
+      const data = encodeMintProofData(
+        txParams.to,
+        txParams.campaignId,
+        txParams.encryptedData
+      );
+
+      // Send transaction
+      const tx = await contract.mintProof(
+        txParams.to,
+        txParams.campaignId,
+        txParams.encryptedData,
+        {
+          gasLimit: txParams.gasLimit,
+          gasPrice: txParams.gasPrice
+        }
+      );
+
+      setStatus("Transaction sent! Waiting for confirmation...");
+      console.log("Transaction hash:", tx.hash);
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
+
+      setStatus("✅ NFT claimed successfully!");
       setAlreadyClaimed(true);
+
     } catch (err) {
       console.error("Claim failed:", err);
-      setStatus(`❌ Claim failed: ${err.message}`);
+      
+      // Decode and handle error
+      const decodedError = decodeTransactionError(err);
+      setStatus(`❌ ${decodedError.message}`);
+      
+      if (decodedError.type === 'already_claimed') {
+        setAlreadyClaimed(true);
+      }
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -116,27 +182,41 @@ const ClaimPage = () => {
           </div>
         )}
 
-        {alreadyClaimed ? (
+        {transactionCost && (
+          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+            Estimated gas cost: {transactionCost.gasCostInEther} XRP
+            <br />
+            Gas price: {transactionCost.gasPrice}
+          </div>
+        )}
+
+        {!address ? (
+          <div className="text-yellow-600 bg-yellow-50 p-3 rounded">
+            Please connect your wallet to claim this NFT
+          </div>
+        ) : alreadyClaimed ? (
           <div className="bg-green-100 text-green-800 px-4 py-2 rounded">
             Already claimed
           </div>
         ) : (
           <button
             onClick={handleClaim}
-            disabled={!!status.includes("Claiming")}
+            disabled={isProcessing}
             className={`mt-4 px-6 py-2 rounded ${
-              status.includes("Claiming")
+              isProcessing
                 ? "bg-gray-400 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700"
             } text-white font-medium transition-colors`}
           >
-            {status || "Claim NFT"}
+            {isProcessing ? "Processing..." : "Claim NFT"}
           </button>
         )}
 
         {status && (
-          <div className={`mt-4 p-2 rounded ${
-            status.includes("✅") ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+          <div className={`mt-4 p-3 rounded ${
+            status.includes("✅") ? "bg-green-100 text-green-800" : 
+            status.includes("❌") ? "bg-red-100 text-red-800" :
+            "bg-blue-100 text-blue-800"
           }`}>
             {status}
           </div>

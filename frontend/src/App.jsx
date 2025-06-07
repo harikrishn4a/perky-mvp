@@ -12,7 +12,6 @@ import CreateCampaign from './components/CreateCampaign';
 import CampaignAnalytics from './components/CampaignAnalytics';
 import CustomerGallery from './components/CustomerGallery';
 import CampaignDetails from './components/CampaignDetails';
-import OptIn from './components/OptIn';
 import LitProtocolTest from './components/LitProtocolTest';
 
 // Define XRPL EVM Sidechain
@@ -70,12 +69,13 @@ const ProtectedRoute = ({ children }) => {
   const walletAddress = localStorage.getItem('walletAddress');
   const userRole = localStorage.getItem('userRole');
 
-  if (!userRole) {
-    return <Navigate to="/" replace />;
-  }
+  useEffect(() => {
+    console.log('Protected Route Check:', { walletAddress, userRole });
+  }, [walletAddress, userRole]);
 
-  if (!walletAddress) {
-    return <Navigate to="/connect" replace />;
+  if (!walletAddress || !userRole) {
+    console.log('Redirecting to landing - missing credentials');
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -83,9 +83,9 @@ const ProtectedRoute = ({ children }) => {
 
 const App = () => {
   useEffect(() => {
-    // Clear any existing wallet data on fresh load
-    localStorage.removeItem('walletAddress');
-    localStorage.removeItem('userRole');
+    // Remove this section - don't clear wallet data on fresh load
+    // localStorage.removeItem('walletAddress');
+    // localStorage.removeItem('userRole');
   }, []);
 
   return (
@@ -117,14 +117,6 @@ const App = () => {
               element={
                 <ProtectedRoute>
                   <CampaignDetails />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/campaign/:id/opt-in" 
-              element={
-                <ProtectedRoute>
-                  <OptIn />
                 </ProtectedRoute>
               } 
             />

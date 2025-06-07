@@ -1,36 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { burnProof } from '../utils/contract';
-import { fetchMetadata } from '../utils/encryption';
+import React, { useState } from 'react';
 
 const NFTCard = ({ campaign, onOptIn }) => {
   const [loading, setLoading] = useState(false);
-  const [metadata, setMetadata] = useState(null);
-  const [decodedMetadata, setDecodedMetadata] = useState(null);
-
-  useEffect(() => {
-    const loadMetadata = async () => {
-      try {
-        if (campaign?.encryptedString) {
-          const decoded = await fetchMetadata(campaign.encryptedString);
-          setDecodedMetadata(decoded);
-        }
-      } catch (error) {
-        console.error('Error loading metadata:', error);
-      }
-    };
-
-    loadMetadata();
-  }, [campaign]);
 
   const handleOptIn = async () => {
     setLoading(true);
     try {
-      // Burn the NFT to mark it as redeemed
-      const tx = await burnProof(campaign.id);
-      await tx.wait();
-
-      // Notify parent component
-      onOptIn(campaign.id, decodedMetadata);
+      // Just notify parent component
+      onOptIn(campaign.id);
     } catch (error) {
       console.error('Error opting in:', error);
       alert('Failed to opt in. Please try again.');
@@ -61,11 +38,11 @@ const NFTCard = ({ campaign, onOptIn }) => {
 
         <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
           <span>{campaign.location}</span>
-          <span>Expires: {new Date(campaign.expiryDate).toLocaleDateString()}</span>
+          <span>Expires: {new Date(Number(campaign.expiryTimestamp) * 1000).toLocaleDateString()}</span>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {campaign.tags.map((tag, index) => (
+          {campaign.tags && campaign.tags.map((tag, index) => (
             <span
               key={index}
               className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded"
@@ -75,21 +52,13 @@ const NFTCard = ({ campaign, onOptIn }) => {
           ))}
         </div>
 
-        {decodedMetadata ? (
-          <div className="bg-green-50 border border-green-200 rounded p-3 mb-4">
-            <p className="text-green-800 text-sm font-medium">
-              You've opted in to share data with this business
-            </p>
-          </div>
-        ) : (
-          <button
-            onClick={handleOptIn}
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Processing...' : 'Opt In & Earn XRP'}
-          </button>
-        )}
+        <button
+          onClick={handleOptIn}
+          disabled={loading}
+          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Processing...' : 'Claim NFT'}
+        </button>
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ const LandingPage = () => {
         {/* User Panel */}
         <div className={`w-1/2 p-12 transition-transform duration-700 ease-in-out ${isBusiness ? 'translate-x-full opacity-0' : 'opacity-100'}`}>
           <div className="h-full flex flex-col">
-            <img src="/logo.png" alt="ProofPerks Logo" className="h-12 mb-12" />
+            <img src="/perky-logo.svg" alt="Perky" className="h-16 mb-12" />
             <h2 className="text-3xl font-bold mb-8">Connect as User</h2>
             <div className="space-y-6">
               <p className="text-gray-600">
@@ -49,7 +49,7 @@ const LandingPage = () => {
         {/* Business Panel */}
         <div className={`absolute top-0 right-0 w-1/2 p-12 transition-transform duration-700 ease-in-out ${!isBusiness ? 'translate-x-full opacity-0' : 'opacity-100'}`}>
           <div className="h-full flex flex-col">
-            <img src="/logo.png" alt="ProofPerks Logo" className="h-12 mb-12" />
+            <img src="/perky-logo.svg" alt="Perky" className="h-16 mb-12" />
             <h2 className="text-3xl font-bold mb-8">Connect as Business</h2>
             <div className="space-y-6">
               <p className="text-gray-600">
