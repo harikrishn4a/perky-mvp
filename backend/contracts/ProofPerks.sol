@@ -5,13 +5,7 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 struct Campaign {
-    string title;
-    string category;
-    string reward;
-    string imageUrl;
-    string location;
-    string expiryDate;
-    string[] tags;
+    bytes encryptedMetadata;     // Encrypted campaign details (title, category, reward, etc)
     uint256 minted;
     uint256 claimed;
     uint256 burned;
@@ -19,53 +13,56 @@ struct Campaign {
     mapping(address => bool) uniqueClaimers;
     mapping(address => uint256) claimTimestamp;
     mapping(address => uint256) burnTimestamp;
+    mapping(address => bytes) encryptedOptInData;
     uint256 uniqueClaimerCount;
+}
+
+struct DataSharing {
+    bool hasOptedIn;
+    bool rewardPaid;
+    bytes encryptedNFTMetadata;
 }
 
 contract ProofPerks is ERC1155, Ownable {
     uint256 public currentCampaignId = 0;
+    address public perkyWallet;  // Perky's wallet for handling payments
+    uint256 public constant USER_REWARD = 1 ether;  // 1 XRP
+    uint256 public constant COMPANY_PAYMENT = 2 ether;  // 2 XRP
     
     mapping(uint256 => Campaign) public campaigns;
+    mapping(address => mapping(address => DataSharing)) public userDataSharing; // user => company => DataSharing
+    
     event ProofMinted(address indexed user, uint256 indexed campaignId, uint256 timestamp);
     event ProofBurned(address indexed user, uint256 indexed campaignId, uint256 timestamp);
+    event CampaignCreated(uint256 indexed campaignId);
+    event DataSharingOptIn(address indexed user, address indexed company);
+    event RewardPaid(address indexed user, address indexed company);
 
-    constructor(string memory uri) ERC1155(uri) Ownable(msg.sender) {}
+    modifier onlyPerky() {
+        require(msg.sender == perkyWallet, "Only Perky wallet can call this");
+        _;
+    }
 
-    function createCampaign(
-        string memory _title,
-        string memory _category,
-        string memory _reward,
-        string memory _imageUrl,
-        string memory _location,
-        string memory _expiryDate,
-        string[] memory _tags
-    ) public onlyOwner {
-        require(bytes(_title).length > 0, "Title is required");
-        require(bytes(_category).length > 0, "Category is required");
-        require(bytes(_reward).length > 0, "Reward is required");
-        require(bytes(_imageUrl).length > 0, "Image URL is required");
-        require(bytes(_location).length > 0, "Location is required");
-        require(bytes(_expiryDate).length > 0, "Expiry date is required");
-        require(_tags.length > 0, "At least one tag is required");
+    constructor(string memory uri, address _perkyWallet) ERC1155(uri) Ownable(msg.sender) {
+        perkyWallet = _perkyWallet;
+    }
+
+    function createCampaign(bytes calldata _encryptedMetadata) public onlyOwner {
+        require(_encryptedMetadata.length > 0, "Encrypted metadata required");
 
         Campaign storage newCampaign = campaigns[currentCampaignId];
-        newCampaign.title = _title;
-        newCampaign.category = _category;
-        newCampaign.reward = _reward;
-        newCampaign.imageUrl = _imageUrl;
-        newCampaign.location = _location;
-        newCampaign.expiryDate = _expiryDate;
-        newCampaign.tags = _tags;
+        newCampaign.encryptedMetadata = _encryptedMetadata;
         newCampaign.minted = 0;
         newCampaign.claimed = 0;
         newCampaign.burned = 0;
         newCampaign.views = 0;
         newCampaign.uniqueClaimerCount = 0;
         
+        emit CampaignCreated(currentCampaignId);
         currentCampaignId++;
     }
 
-    function mintProof(address _to, uint256 _campaignId) public {
+    function mintProof(address _to, uint256 _campaignId, bytes calldata _encryptedData) public {
         require(_campaignId < currentCampaignId, "Invalid campaign");
         Campaign storage campaign = campaigns[_campaignId];
         
@@ -74,6 +71,9 @@ contract ProofPerks is ERC1155, Ownable {
             campaign.uniqueClaimers[_to] = true;
             campaign.uniqueClaimerCount++;
         }
+        
+        // Store encrypted opt-in data
+        campaign.encryptedOptInData[_to] = _encryptedData;
         
         // Track claim timestamp
         campaign.claimTimestamp[_to] = block.timestamp;
@@ -129,24 +129,78 @@ contract ProofPerks is ERC1155, Ownable {
     }
 
     function getCampaignById(uint256 _campaignId) public view returns (
-        string memory, string memory, string memory, string memory,
-        string memory, string memory, string[] memory,
-        uint256, uint256, uint256, uint256
+        bytes memory encryptedMetadata,
+        uint256 minted,
+        uint256 claimed,
+        uint256 burned,
+        uint256 views
     ) {
         require(_campaignId < currentCampaignId, "Invalid campaign ID");
         Campaign storage c = campaigns[_campaignId];
         return (
-            c.title,
-            c.category,
-            c.reward,
-            c.imageUrl,
-            c.location,
-            c.expiryDate,
-            c.tags,
+            c.encryptedMetadata,
             c.minted,
             c.claimed,
             c.burned,
             c.views
         );
+    }
+
+    function storeEncryptedOptIn(uint256 _campaignId, bytes calldata _encryptedData) public {
+        require(_campaignId < currentCampaignId, "Invalid campaign ID");
+        Campaign storage campaign = campaigns[_campaignId];
+        require(campaign.uniqueClaimers[msg.sender], "Must be a campaign claimer");
+        campaign.encryptedOptInData[msg.sender] = _encryptedData;
+    }
+
+    function getEncryptedOptIn(uint256 _campaignId, address _user) public view onlyOwner returns (bytes memory) {
+        require(_campaignId < currentCampaignId, "Invalid campaign ID");
+        Campaign storage campaign = campaigns[_campaignId];
+        require(campaign.uniqueClaimers[_user], "User has not claimed this campaign");
+        return campaign.encryptedOptInData[_user];
+    }
+
+    // Function to update Perky wallet
+    function setPerkyWallet(address _newWallet) external onlyOwner {
+        require(_newWallet != address(0), "Invalid wallet address");
+        perkyWallet = _newWallet;
+    }
+
+    // After claiming NFT, user can opt in to share data
+    function optInToDataSharing(address _company, bytes calldata _encryptedNFTMetadata) external payable {
+        require(msg.value >= COMPANY_PAYMENT, "Insufficient payment");
+        require(!userDataSharing[msg.sender][_company].hasOptedIn, "Already opted in");
+        
+        // Store the encrypted NFT metadata
+        userDataSharing[msg.sender][_company] = DataSharing({
+            hasOptedIn: true,
+            rewardPaid: false,
+            encryptedNFTMetadata: _encryptedNFTMetadata
+        });
+
+        emit DataSharingOptIn(msg.sender, _company);
+    }
+
+    // Perky wallet pays reward to user
+    function payUserReward(address _user, address _company) external payable onlyPerky {
+        require(userDataSharing[_user][_company].hasOptedIn, "User has not opted in");
+        require(!userDataSharing[_user][_company].rewardPaid, "Reward already paid");
+        require(msg.value >= USER_REWARD, "Insufficient reward amount");
+
+        userDataSharing[_user][_company].rewardPaid = true;
+        payable(_user).transfer(USER_REWARD);
+        emit RewardPaid(_user, _company);
+    }
+
+    // Get user's encrypted NFT metadata (only accessible by company if opted in)
+    function getSharedData(address _user) external view returns (bytes memory) {
+        require(userDataSharing[_user][msg.sender].hasOptedIn, "User has not shared data");
+        require(userDataSharing[_user][msg.sender].rewardPaid, "Reward not yet paid");
+        return userDataSharing[_user][msg.sender].encryptedNFTMetadata;
+    }
+
+    // Check if user has opted in to share data with a company
+    function hasOptedIn(address _user, address _company) external view returns (bool) {
+        return userDataSharing[_user][_company].hasOptedIn;
     }
 }

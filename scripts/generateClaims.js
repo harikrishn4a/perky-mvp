@@ -1,4 +1,5 @@
 const { Web3 } = require('web3');
+const ethers = require('ethers');
 
 // Contract ABI (just the functions we need)
 const contractABI = [
@@ -51,6 +52,45 @@ async function fundAccount(web3, fromAccount, toAddress, amount) {
   } catch (error) {
     console.error(`❌ Failed to fund ${toAddress}:`, error.message);
   }
+}
+
+// Function to generate mock opt-in data
+function generateMockOptInData() {
+  return {
+    email: `user${Math.random().toString(36).substring(7)}@example.com`,
+    phoneNumber: `+1${Math.floor(Math.random() * 9000000000) + 1000000000}`,
+    marketingPreferences: {
+      email: Math.random() > 0.5,
+      sms: Math.random() > 0.5,
+      notifications: Math.random() > 0.5
+    }
+  };
+}
+
+// Function to encrypt opt-in data
+async function encryptOptInData(data, businessPublicKey) {
+  // Convert data to bytes
+  const dataBytes = ethers.utils.toUtf8Bytes(JSON.stringify(data));
+  
+  // Generate a random symmetric key
+  const symmetricKey = ethers.utils.randomBytes(32);
+  
+  // Encrypt data with symmetric key
+  const encryptedData = await web3.eth.personal.encrypt(
+    dataBytes,
+    symmetricKey.toString('hex')
+  );
+  
+  // Encrypt symmetric key with business public key
+  const encryptedKey = await web3.eth.personal.encrypt(
+    symmetricKey,
+    businessPublicKey
+  );
+  
+  // Combine encrypted data and key
+  return web3.utils.hexToBytes(
+    web3.utils.hexConcat([encryptedKey, encryptedData])
+  );
 }
 
 async function main() {
@@ -123,8 +163,19 @@ async function main() {
       // Claim with each selected account
       for (const account of selectedAccounts) {
         try {
+          // Generate and encrypt opt-in data
+          const optInData = generateMockOptInData();
+          const encryptedData = await encryptOptInData(
+            optInData,
+            process.env.BUSINESS_PUBLIC_KEY
+          );
+          
           // Create the transaction
-          const mintTx = contract.methods.mintProof(account.address, campaignId);
+          const mintTx = contract.methods.mintProof(
+            account.address,
+            campaignId,
+            encryptedData
+          );
           const gas = await mintTx.estimateGas({ from: account.address });
           const gasPrice = await web3.eth.getGasPrice();
           

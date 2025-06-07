@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getContract } from '../utils/contract';
 
 // Default placeholder image from Unsplash
@@ -42,9 +42,17 @@ const CustomerGallery = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   // IDs of campaigns to hide
   const hiddenCampaignIds = [0]; // Add more IDs here if needed
+
+  const handleBackToHome = () => {
+    // Clear wallet address and user role when going back to home
+    localStorage.removeItem('walletAddress');
+    localStorage.removeItem('userRole');
+    navigate('/');
+  };
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -118,7 +126,18 @@ const CustomerGallery = () => {
   if (error) {
     return (
       <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Explore Campaigns</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Explore Campaigns</h2>
+          <button
+            onClick={handleBackToHome}
+            className="text-gray-600 hover:text-gray-800 flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span>Back to Home</span>
+          </button>
+        </div>
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4">
           Error loading campaigns: {error}
         </div>
@@ -129,7 +148,18 @@ const CustomerGallery = () => {
   if (loading) {
     return (
       <div className="p-6">
-        <h2 className="text-2xl font-bold mb-4">Explore Campaigns</h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold">Explore Campaigns</h2>
+          <button
+            onClick={handleBackToHome}
+            className="text-gray-600 hover:text-gray-800 flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+            </svg>
+            <span>Back to Home</span>
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
             <div key={i} className="border rounded p-4 shadow animate-pulse">
@@ -145,7 +175,18 @@ const CustomerGallery = () => {
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Explore Campaigns</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Explore Campaigns</h2>
+        <button
+          onClick={handleBackToHome}
+          className="text-gray-600 hover:text-gray-800 flex items-center space-x-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          <span>Back to Home</span>
+        </button>
+      </div>
       {campaigns.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-500">No campaigns available yet.</p>

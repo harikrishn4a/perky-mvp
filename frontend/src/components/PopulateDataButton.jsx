@@ -9,11 +9,14 @@ const PopulateDataButton = () => {
   // Configuration
   const config = {
     contractAddress: process.env.REACT_APP_CONTRACT_ADDRESS,
-    minMints: 20, // Minimum mints per campaign
-    maxMints: 100, // Maximum mints per campaign
-    minBurnPercentage: 30, // Minimum percentage to burn
-    maxBurnPercentage: 80, // Maximum percentage to burn
-    delayBetweenTx: 1000,
+    minMints: 5,
+    maxMints: 10,
+    minBurnPercentage: 30,
+    maxBurnPercentage: 50,
+    delayBetweenTx: 500,
+    // Use your private key here - NEVER commit this to git
+    privateKey: process.env.REACT_APP_PRIVATE_KEY,
+    rpcUrl: process.env.REACT_APP_RPC_URL || "https://rpc-evm-sidechain.xrpl.org"
   };
 
   const addLog = (message) => {
@@ -22,7 +25,6 @@ const PopulateDataButton = () => {
 
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // Generate random number between min and max (inclusive)
   const getRandomNumber = (min, max) => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   };
@@ -32,110 +34,99 @@ const PopulateDataButton = () => {
     setLogs([]);
 
     try {
-      // Connect to the network
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
+      // Debug logging for environment variables
+      addLog(`Contract Address: ${config.contractAddress}`);
+      addLog(`RPC URL: ${config.rpcUrl}`);
+      // Log private key length and format (safely)
+      const pk = config.privateKey || '';
+      addLog(`Private Key length: ${pk.length}`);
+      addLog(`Private Key starts with: ${pk.slice(0, 4)}...`);
+      addLog(`Has 0x prefix: ${pk.startsWith('0x')}`);
+
+      // Validate private key format
+      if (!pk || pk.length !== 66 || !pk.startsWith('0x')) {
+        throw new Error('Invalid private key format. Must be a 32-byte hex string with 0x prefix (66 characters total)');
+      }
+
+      // Connect using private key
+      const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+      const wallet = new ethers.Wallet(config.privateKey, provider);
+      const userAddress = await wallet.getAddress();
       addLog(`Connected with address: ${userAddress}`);
 
       // Create contract instance
-      const contract = new ethers.Contract(config.contractAddress, ProofPerksABI.abi, signer);
+      const contract = new ethers.Contract(config.contractAddress, ProofPerksABI.abi, wallet);
 
       // Get total campaigns
       const totalCampaigns = await contract.currentCampaignId();
       addLog(`Total campaigns: ${totalCampaigns}`);
+
+      if (totalCampaigns === 0) {
+        addLog('No campaigns found. Please create some campaigns first.');
+        return;
+      }
 
       // Process each campaign
       for (let campaignId = 0; campaignId < totalCampaigns; campaignId++) {
         addLog(`\nProcessing campaign ${campaignId}...`);
         
         try {
-          // Get campaign details to verify it exists
-          const campaign = await contract.getCampaignById(campaignId);
-          if (!campaign) {
-            addLog(`Campaign ${campaignId} does not exist, skipping...`);
-            continue;
-          }
-
-          // Get current campaign stats
-          const stats = await contract.getCampaignStats(campaignId);
-          const currentMinted = Number(stats[1]);
-          
-          // Generate random target number of mints for this campaign
           const targetMints = getRandomNumber(config.minMints, config.maxMints);
-          
-          // Generate different addresses to simulate unique users
+          addLog(`Target mints for campaign ${campaignId}: ${targetMints}`);
+
+          // Generate addresses and track successful mints
+          const mintedAddresses = [];
           const addresses = [];
-          
-          if (currentMinted < targetMints) {
-            const mintsNeeded = targetMints - currentMinted;
-            addLog(`Target mints for campaign ${campaignId}: ${targetMints}`);
-            addLog(`Minting ${mintsNeeded} NFTs for campaign ${campaignId}...`);
-
-            // Generate addresses for new mints
-            for (let i = 0; i < mintsNeeded; i++) {
-              const wallet = ethers.Wallet.createRandom();
-              addresses.push(wallet.address);
-            }
-
-            // Mint NFTs
-            for (const address of addresses) {
-              try {
-                const tx = await contract.mintProof(address, campaignId);
-                await tx.wait();
-                addLog(`Minted NFT for ${address.slice(0, 8)}...`);
-                await sleep(config.delayBetweenTx);
-              } catch (error) {
-                addLog(`Error minting for ${address.slice(0, 8)}...: ${error.message}`);
-              }
-            }
-          } else {
-            addLog(`Campaign ${campaignId} already has sufficient mints (${currentMinted})`);
+          for (let i = 0; i < targetMints; i++) {
+            const wallet = ethers.Wallet.createRandom();
+            addresses.push(wallet.address);
           }
 
-          // Get updated stats after minting
-          const updatedStats = await contract.getCampaignStats(campaignId);
-          const totalMinted = Number(updatedStats[1]);
-          const currentBurned = Number(updatedStats[3]);
+          // Mint NFTs
+          for (const address of addresses) {
+            try {
+              const tx = await contract.mintProof(address, campaignId);
+              await tx.wait();
+              mintedAddresses.push(address); // Track successful mints
+              addLog(`✓ Minted NFT for ${address.slice(0, 8)}...`);
+              await sleep(config.delayBetweenTx);
+            } catch (error) {
+              addLog(`❌ Error minting for ${address.slice(0, 8)}...: ${error.message}`);
+              continue;
+            }
+          }
 
-          // Generate random burn percentage for this campaign
+          // Calculate burns from successful mints only
           const burnPercentage = getRandomNumber(config.minBurnPercentage, config.maxBurnPercentage);
-          const targetBurns = Math.floor((totalMinted * burnPercentage) / 100);
-          
-          if (currentBurned < targetBurns && addresses.length > 0) {
-            const burnsNeeded = targetBurns - currentBurned;
-            addLog(`Target burns for campaign ${campaignId}: ${targetBurns} (${burnPercentage}% of mints)`);
-            addLog(`Simulating ${burnsNeeded} redemptions for campaign ${campaignId}...`);
+          const targetBurns = Math.floor((mintedAddresses.length * burnPercentage) / 100);
+          addLog(`Target burns for campaign ${campaignId}: ${targetBurns} (${burnPercentage}% of mints)`);
 
-            // Burn tokens for each address that has an NFT
-            for (const address of addresses) {
-              try {
-                // Check if address has an NFT to burn
-                const balance = await contract.balanceOf(address, campaignId);
-                if (balance > 0) {
-                  const tx = await contract.burnProof(address, campaignId);
-                  await tx.wait();
-                  addLog(`Burned NFT for ${address.slice(0, 8)}...`);
-                  await sleep(config.delayBetweenTx);
-                }
-              } catch (error) {
-                addLog(`Error burning for ${address.slice(0, 8)}...: ${error.message}`);
-              }
+          // Burn tokens only for addresses we know were minted successfully
+          for (let i = 0; i < targetBurns && i < mintedAddresses.length; i++) {
+            const address = mintedAddresses[i];
+            try {
+              const tx = await contract.burnProof(address, campaignId);
+              await tx.wait();
+              addLog(`✓ Burned NFT for ${address.slice(0, 8)}...`);
+              await sleep(config.delayBetweenTx);
+            } catch (error) {
+              addLog(`❌ Error burning for ${address.slice(0, 8)}...: ${error.message}`);
+              continue;
             }
-          } else {
-            addLog(`Campaign ${campaignId} already has sufficient burns (${currentBurned})`);
           }
+
+          addLog(`✓ Completed campaign ${campaignId}`);
 
         } catch (error) {
-          addLog(`Error processing campaign ${campaignId}: ${error.message}`);
+          addLog(`❌ Error processing campaign ${campaignId}: ${error.message}`);
           continue;
         }
       }
 
-      addLog('\nData population completed!');
+      addLog('\n✨ Data population completed!');
       
     } catch (error) {
-      addLog(`Script failed: ${error.message}`);
+      addLog(`❌ Script failed: ${error.message}`);
     } finally {
       setLoading(false);
     }

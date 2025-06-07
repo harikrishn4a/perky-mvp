@@ -1,17 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getCampaignById, getLiveCampaignAnalytics } from '../utils/contract';
+import { getCampaignById } from '../utils/contract';
 import { Bar } from 'react-chartjs-2';
-import AIAnalytics from './AIAnalytics';
-import AIChat from './AIChat';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
-  PointElement,
-  LineElement,
-  ArcElement,
   Title,
   Tooltip,
   Legend,
@@ -21,9 +16,6 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
-  PointElement,
-  LineElement,
-  ArcElement,
   Title,
   Tooltip,
   Legend
@@ -33,14 +25,6 @@ const CampaignAnalytics = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [campaign, setCampaign] = useState(null);
-  const [analytics, setAnalytics] = useState({
-    conversionMetrics: {
-      claimed: 0,
-      minted: 0,
-      burned: 0
-    },
-    tags: []
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -69,21 +53,6 @@ const CampaignAnalytics = () => {
         }
         console.log('Campaign data received:', data);
         setCampaign(data);
-        
-        // Get live analytics
-        console.log('Fetching live analytics for ID:', numericId);
-        const liveAnalytics = await getLiveCampaignAnalytics(numericId);
-        console.log('Live analytics received:', liveAnalytics);
-        
-        setAnalytics({
-          conversionMetrics: {
-            minted: Number(data.minted) || 0,
-            claimed: Number(data.claimed) || 0,
-            burned: Number(data.burned) || 0
-          },
-          uniqueClaimers: Number(liveAnalytics.uniqueClaimers) || 0,
-          tags: data.tags || []
-        });
       } catch (err) {
         console.error('Error fetching campaign data:', err);
         setError(err.message);
@@ -138,8 +107,8 @@ const CampaignAnalytics = () => {
     );
   }
 
-  const claimConversionRate = (analytics.conversionMetrics.claimed / analytics.conversionMetrics.minted * 100).toFixed(1);
-  const redemptionRate = (analytics.conversionMetrics.burned / analytics.conversionMetrics.minted * 100).toFixed(1);
+  const claimConversionRate = (campaign.claimed / campaign.minted * 100).toFixed(1);
+  const redemptionRate = (campaign.burned / campaign.minted * 100).toFixed(1);
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -166,9 +135,9 @@ const CampaignAnalytics = () => {
           <p className="text-sm text-gray-500">Burned vs Minted</p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="font-semibold mb-2">Unique Users</h3>
-          <p className="text-3xl font-bold text-purple-600">{analytics.uniqueClaimers}</p>
-          <p className="text-sm text-gray-500">Total unique claimers</p>
+          <h3 className="font-semibold mb-2">Views</h3>
+          <p className="text-3xl font-bold text-purple-600">{campaign.views || 0}</p>
+          <p className="text-sm text-gray-500">Total campaign views</p>
         </div>
       </div>
 
@@ -180,9 +149,9 @@ const CampaignAnalytics = () => {
             datasets: [{
               label: 'Count',
               data: [
-                analytics.conversionMetrics.minted,
-                analytics.conversionMetrics.claimed,
-                analytics.conversionMetrics.burned
+                campaign.minted,
+                campaign.claimed,
+                campaign.burned
               ],
               backgroundColor: ['#2196F3', '#4CAF50', '#F44336']
             }]
@@ -197,23 +166,40 @@ const CampaignAnalytics = () => {
         />
       </div>
 
-      {/* Tags Analysis */}
+      {/* Campaign Details */}
       <div className="bg-white p-6 rounded-lg shadow mb-8">
+        <h3 className="font-semibold mb-4">Campaign Details</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-gray-600">Category</p>
+            <p className="font-medium">{campaign.category}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Location</p>
+            <p className="font-medium">{campaign.location}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Reward</p>
+            <p className="font-medium">{campaign.reward}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Expiry Date</p>
+            <p className="font-medium">{campaign.expiryDate}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tags */}
+      <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="font-semibold mb-4">Campaign Tags</h3>
         <div className="flex flex-wrap gap-2">
-          {analytics.tags.map((tag, index) => (
+          {campaign.tags.map((tag, index) => (
             <span key={index} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
               {tag}
             </span>
           ))}
         </div>
       </div>
-
-      {/* AI Analytics */}
-      <AIAnalytics campaign={campaign} />
-
-      {/* AI Chat Interface */}
-      <AIChat campaign={campaign} />
     </div>
   );
 };

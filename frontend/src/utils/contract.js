@@ -1,217 +1,374 @@
 /* global BigInt */
 import { ethers } from 'ethers';
+import { isBytes } from '@ethersproject/bytes';
 import ProofPerksABI from './ProofPerks.json';
+import { encryptData as litEncrypt, decryptData as litDecrypt } from './lit';
+import { getPublicClient, getWalletClient } from '@wagmi/core';
+import { contractABI, contractAddress } from './constants';
 
-const contractAddress = process.env.REACT_APP_CONTRACT_ADDRESS;
 console.log('Contract address from env:', contractAddress);
 
-export const getContract = async () => {
-  if (typeof window.ethereum === 'undefined') {
-    throw new Error('Please install MetaMask');
-  }
+// XRPL EVM Sidechain Devnet configuration
+const XRPL_NETWORK = {
+  chainId: '0x15f002',  // 1440002 in decimal
+  chainName: 'XRPL EVM Sidechain Devnet',
+  nativeCurrency: {
+    name: 'XRP',
+    symbol: 'XRP',
+    decimals: 18
+  },
+  rpcUrls: [
+    'https://rpc-evm-sidechain.xrpl.org',
+    'https://rpc-evm-sidechain.peersyst.tech'
+  ],
+  blockExplorerUrls: ['https://evm-sidechain.xrpl.org/explorer'],
+  timeout: 30000 // 30 seconds timeout
+};
 
+// Get contract instance
+export const getContract = async (withSigner = false) => {
   try {
-    console.log('Requesting MetaMask account access...');
-    // Request account access
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    console.log('Connected accounts:', accounts);
-    
-    // Create Web3Provider
+    if (!window.ethereum) {
+      throw new Error('Please install MetaMask or another Web3 wallet');
+    }
+
+    const publicClient = getPublicClient();
+    if (!publicClient) {
+      throw new Error('No provider available. Please ensure your wallet is connected.');
+    }
+
+    // Check if we're on the correct network
+    const chainId = await publicClient.getChainId();
+    if (chainId !== 1440002) {
+      throw new Error('Please switch to the XRPL EVM Sidechain (Chain ID: 1440002)');
+    }
+
+    if (withSigner) {
+      const walletClient = await getWalletClient();
+      if (!walletClient) {
+        throw new Error('Please connect your wallet to continue');
+      }
+
+      // Request account access
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found. Please connect your wallet.');
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      return new ethers.Contract(contractAddress, contractABI, signer);
+    }
+
     const provider = new ethers.BrowserProvider(window.ethereum);
-    console.log('Provider created');
-
-    // Get network information
-    const network = await provider.getNetwork();
-    console.log('Current network:', {
-      name: network.name,
-      chainId: network.chainId.toString()
-    });
-
-    // Check if we're on the right network (XRPL EVM Sidechain)
-    const targetChainId = BigInt(1440002);
-    if (network.chainId !== targetChainId) {
-      // Request network switch
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x15F902' }], // 1440002 in hex
-        });
-      } catch (switchError) {
-        // This error code indicates that the chain has not been added to MetaMask
-        if (switchError.code === 4902) {
-          try {
-            await window.ethereum.request({
-              method: 'wallet_addEthereumChain',
-              params: [
-                {
-                  chainId: '0x15F902', // 1440002 in hex
-                  chainName: 'XRPL EVM Sidechain',
-                  nativeCurrency: {
-                    name: 'XRP',
-                    symbol: 'XRP',
-                    decimals: 18,
-                  },
-                  rpcUrls: ['https://rpc-evm-sidechain.xrpl.org'],
-                  blockExplorerUrls: ['https://evm-sidechain.xrpl.org'],
-                },
-              ],
-            });
-          } catch (addError) {
-            console.error('Error adding network:', addError);
-            throw new Error('Please add and switch to the XRPL EVM Sidechain network in MetaMask');
-          }
-        } else {
-          console.error('Error switching network:', switchError);
-          throw new Error('Please switch to the XRPL EVM Sidechain network in MetaMask');
-        }
-      }
-
-      // After switching/adding network, get the new provider and network
-      const updatedProvider = new ethers.BrowserProvider(window.ethereum);
-      const updatedNetwork = await updatedProvider.getNetwork();
-      console.log('Updated network:', {
-        name: updatedNetwork.name,
-        chainId: updatedNetwork.chainId.toString()
-      });
-
-      if (updatedNetwork.chainId !== targetChainId) {
-        throw new Error('Failed to switch to XRPL EVM Sidechain network. Please try manually switching in MetaMask.');
-      }
-    }
-    
-    console.log('Getting signer...');
-    const signer = await provider.getSigner();
-    const signerAddress = await signer.getAddress();
-    console.log('Signer address:', signerAddress);
-    
-    if (!contractAddress) {
-      throw new Error('Contract address is not configured. Please check your environment variables.');
-    }
-    
-    // Create contract instance using the abi from the imported JSON
-    console.log('Creating contract instance with address:', contractAddress);
-    const contract = new ethers.Contract(contractAddress, ProofPerksABI.abi, signer);
-    
-    // Verify contract connection and deployment
-    try {
-      console.log('Verifying contract deployment...');
-      const code = await provider.getCode(contractAddress);
-      if (code === '0x') {
-        throw new Error('No contract deployed at the specified address');
-      }
-      console.log('Contract code found at address');
-
-      console.log('Getting campaign count...');
-      const campaignCount = await contract.currentCampaignId();
-      console.log('Successfully connected to contract. Current campaign count:', campaignCount.toString());
-      
-      // Try a test call to verify contract interface
-      try {
-        console.log('Testing contract interface with campaign 0...');
-        const testCampaign = await contract.getCampaignById(0);
-        console.log('Test call successful:', testCampaign);
-      } catch (testErr) {
-        console.warn('Test call failed:', testErr);
-        // Don't throw here, just log the warning
-      }
-    } catch (err) {
-      console.error('Contract verification failed:', err);
-      if (err.message.includes('No contract')) {
-        throw new Error('Contract not deployed at the specified address. Please check your configuration.');
-      } else {
-        throw new Error('Failed to connect to contract: ' + err.message);
-      }
-    }
-    
-    return contract;
+    return new ethers.Contract(contractAddress, contractABI, provider);
   } catch (error) {
     console.error('Error getting contract:', error);
-    if (error.message.includes('user rejected')) {
-      throw new Error('Please connect your MetaMask wallet to view campaign analytics');
+    throw error;
+  }
+};
+
+// Encryption utilities
+export const encryptData = async (data, publicKey) => {
+  // Convert data to bytes
+  const dataBytes = new TextEncoder().encode(JSON.stringify(data));
+  
+  // Generate a random symmetric key
+  const symmetricKey = new Uint8Array(32);
+  crypto.getRandomValues(symmetricKey);
+  
+  // Encrypt data with symmetric key (using AES)
+  const encryptedData = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: new Uint8Array(12) },
+    await window.crypto.subtle.importKey(
+      "raw",
+      symmetricKey,
+      { name: "AES-GCM" },
+      false,
+      ["encrypt"]
+    ),
+    dataBytes
+  );
+  
+  // Encrypt symmetric key with public key
+  const encryptedKey = ethers.solidityPackedKeccak256(symmetricKey);
+  
+  // Combine encrypted data and key
+  return ethers.concat([
+    encryptedKey,
+    new Uint8Array(encryptedData)
+  ]);
+};
+
+export const decryptData = async (encryptedData, privateKey) => {
+  try {
+    // Split encrypted data into key and content
+    const encryptedKey = encryptedData.slice(0, 32); // Adjust size based on your encryption
+    const encryptedContent = encryptedData.slice(32);
+    
+    // Decrypt symmetric key using private key
+    const symmetricKey = ethers.solidityPackedKeccak256(privateKey);
+    
+    // Decrypt data using symmetric key
+    const decryptedData = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: new Uint8Array(12) },
+      await window.crypto.subtle.importKey(
+        "raw",
+        symmetricKey,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"]
+      ),
+      encryptedContent
+    );
+    
+    // Convert bytes to JSON
+    const decodedText = new TextDecoder().decode(decryptedData);
+    return JSON.parse(decodedText);
+  } catch (error) {
+    console.error('Decryption error:', error);
+    throw new Error('Failed to decrypt data');
+  }
+};
+
+// Create campaign
+export const createCampaign = async (title, category, reward, metadataUrl, location, expiryDate, tags) => {
+  try {
+    const contract = await getContract(true);
+    
+    // Request account access again just to be sure
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || accounts.length === 0) {
+      throw new Error('No accounts found. Please connect your wallet.');
+    }
+
+    // Convert expiry date to timestamp and then to string
+    const expiryTimestamp = Math.floor(new Date(expiryDate).getTime() / 1000).toString();
+    
+    // Ensure all parameters are properly formatted
+    const params = {
+      title: String(title),
+      category: String(category),
+      reward: String(reward),
+      metadataUrl: String(metadataUrl),
+      location: String(location),
+      expiryTimestamp,
+      tags: tags.map(tag => String(tag))
+    };
+
+    console.log('Creating campaign with params:', params);
+    
+    // Create campaign with metadata URL
+    console.log('Sending transaction with account:', accounts[0]);
+    const tx = await contract.createCampaign(
+      params.title,
+      params.category,
+      params.reward,
+      params.metadataUrl,
+      params.location,
+      params.expiryTimestamp,
+      params.tags,
+      {
+        from: accounts[0],
+        gasLimit: ethers.getBigInt(500000)
+      }
+    );
+    
+    console.log('Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('Transaction confirmed:', receipt);
+    
+    return tx;
+  } catch (error) {
+    console.error('Error creating campaign:', error);
+    if (error.message.includes('user rejected') || error.code === 4001) {
+      throw new Error('Transaction was rejected. Please try again.');
     }
     throw error;
   }
 };
 
-if (typeof window !== "undefined") {
-  window.getContract = getContract;
-}
+// Get campaign details
+export const getCampaign = async (campaignId) => {
+  try {
+    const contract = await getContract();
+    const campaign = await contract.campaigns(campaignId);
+    
+    return {
+      id: campaignId,
+      title: campaign.title,
+      category: campaign.category,
+      reward: campaign.reward,
+      metadataUrl: campaign.metadataUrl,
+      location: campaign.location,
+      expiryDate: new Date(campaign.expiryDate * 1000).toISOString(),
+      tags: campaign.tags,
+      owner: campaign.owner,
+      active: campaign.active
+    };
+  } catch (error) {
+    console.error('Error getting campaign:', error);
+    throw error;
+  }
+};
 
-// Get campaign details by campaignId
+export const mintProof = async (campaignId, optInData) => {
+  try {
+    const contract = await getContract(true);
+    
+    // Get the signer directly from the provider
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    if (!signer) {
+      throw new Error('No wallet connected. Please connect your wallet to continue.');
+    }
+    
+    // Get the signer's address
+    const address = await signer.getAddress();
+    if (!address) {
+      throw new Error('No wallet address available. Please connect your wallet.');
+    }
+
+    // Convert campaignId to number first
+    const campaignIdNum = Number(campaignId);
+    if (isNaN(campaignIdNum)) {
+      throw new Error('Invalid campaign ID');
+    }
+
+    // Get total campaigns to validate ID
+    const totalCampaigns = await contract.currentCampaignId();
+    if (campaignIdNum >= Number(totalCampaigns)) {
+      throw new Error(`Campaign ${campaignId} does not exist. Total campaigns: ${totalCampaigns}`);
+    }
+
+    // Convert opt-in data to bytes
+    const encodedData = ethers.toUtf8Bytes(JSON.stringify({
+      ...optInData,
+      timestamp: Date.now(),
+      userAddress: address
+    }));
+    
+    console.log('Minting with parameters:', {
+      to: address,
+      campaignId: campaignIdNum,
+      encodedDataLength: encodedData.length,
+      contractAddress: contract.target
+    });
+
+    // Create campaign with metadata URL
+    console.log('Sending transaction with account:', address);
+    const tx = await contract.mintProof(
+      address,
+      campaignIdNum,
+      encodedData,
+      {
+        from: address,
+        gasLimit: ethers.getBigInt(500000)
+      }
+    );
+    
+    console.log('Transaction sent:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('Transaction confirmed:', receipt);
+    
+    return tx;
+  } catch (error) {
+    console.error('Error in mintProof:', error);
+    if (error.code === 4001) {
+      throw new Error('Transaction was rejected. Please try again.');
+    } else if (error.message.includes('network')) {
+      throw new Error('Network error. Please check your connection to the XRPL EVM Sidechain.');
+    } else if (error.message.includes('campaign might not exist')) {
+      throw new Error('This campaign does not exist or you may have already minted.');
+    }
+    throw error;
+  }
+};
+
+export const burnProof = async (campaignId) => {
+  const contract = await getContract(true);
+  const tx = await contract.burnProof(await contract.signer.getAddress(), campaignId);
+  await tx.wait();
+  return tx;
+};
+
+// Get campaign with decrypted metadata
 export const getCampaignById = async (campaignId) => {
   try {
     const contract = await getContract();
     console.log('Getting campaign with ID:', campaignId);
     
-    // First check if campaign exists by getting total campaigns
+    // First check if campaign exists
     const totalCampaigns = await contract.currentCampaignId();
     console.log('Total campaigns:', totalCampaigns.toString());
     
-    // Convert campaignId to number first to handle string inputs
     const numericId = Number(campaignId);
-    if (isNaN(numericId)) {
+    if (isNaN(numericId) || numericId < 0) {
       throw new Error('Invalid campaign ID');
     }
     
-    // Convert to BigInt for contract call
-    const id = ethers.toBigInt(numericId);
-    console.log('Converted ID:', id.toString());
+    // Convert to BigInt for comparison
+    const id = BigInt(numericId);
+    const total = BigInt(totalCampaigns);
     
-    if (id >= totalCampaigns) {
-      throw new Error(`Campaign ID ${id} does not exist. Total campaigns: ${totalCampaigns}`);
+    // Campaign IDs start from 0, so we check if id is less than total
+    if (id >= total) {
+      throw new Error(`Campaign ID ${id} does not exist. Total campaigns: ${total}`);
     }
 
-    // Get campaign data directly from contract
-    console.log('Fetching campaign data...');
-    const campaign = await contract.getCampaignById(id);
-    console.log('Raw campaign data:', campaign);
+    // Get campaign data using getCampaignById since it returns all fields
+    const campaignData = await contract.getCampaignById(id);
+    console.log('Raw campaign data:', campaignData);
 
-    if (!campaign || !Array.isArray(campaign)) {
-      throw new Error('Invalid campaign data received');
-    }
-
-    // Transform array response to object (matching CustomerGallery approach)
-    const formattedCampaign = {
-      id: numericId, // Use the numeric ID for consistency
-      title: campaign[0] || 'Untitled Campaign',
-      category: campaign[1] || '',
-      reward: campaign[2] || 'No description',
-      imageUrl: campaign[3] || '',
-      location: campaign[4] || '',
-      expiry: campaign[5] ? Number(campaign[5]) : null,
-      tags: campaign[6] || [],
-      minted: Number(campaign[7]) || 0,
-      claimed: Number(campaign[8]) || 0,
-      burned: Number(campaign[9]) || 0,
-      views: Number(campaign[10]) || 0
+    // Process the campaign data - getCampaignById returns an array of values
+    const processedData = {
+      id: numericId,
+      title: campaignData[0] || 'Untitled Campaign',
+      description: campaignData[1] || '',
+      imageUrl: campaignData[2] || '',
+      category: campaignData[3] || 'General',
+      location: campaignData[4] || 'Online',
+      reward: campaignData[5] || 'NFT Proof',
+      tags: Array.isArray(campaignData[6]) ? campaignData[6] : [],
+      minted: Number(campaignData[7]) || 0,
+      claimed: Number(campaignData[8]) || 0,
+      burned: Number(campaignData[9]) || 0,
+      views: Number(campaignData[10]) || 0
     };
 
-    // Validate and clean up image URL
-    if (formattedCampaign.imageUrl) {
-      try {
-        new URL(formattedCampaign.imageUrl);
-      } catch (e) {
-        console.warn(`Invalid image URL for campaign ${id}:`, formattedCampaign.imageUrl);
-        formattedCampaign.imageUrl = '';
-      }
-    }
-
-    // Add calculated metrics
-    if (formattedCampaign.minted > 0) {
-      formattedCampaign.claimRate = ((formattedCampaign.claimed / formattedCampaign.minted) * 100).toFixed(1);
-      formattedCampaign.burnRate = ((formattedCampaign.burned / formattedCampaign.minted) * 100).toFixed(1);
-    } else {
-      formattedCampaign.claimRate = '0.0';
-      formattedCampaign.burnRate = '0.0';
-    }
-
-    console.log('Formatted campaign:', formattedCampaign);
-    return formattedCampaign;
+    console.log('Processed campaign data:', processedData);
+    return processedData;
   } catch (err) {
     console.error('Error in getCampaignById:', err);
     throw err;
   }
 };
+
+export const getCampaignMetrics = async (campaignId, userAddress) => {
+  const contract = await getContract();
+  const metrics = await contract.getCampaignMetrics(campaignId, userAddress);
+  return {
+    claimTime: metrics[0].toNumber(),
+    burnTime: metrics[1].toNumber(),
+    hasRedeemed: metrics[2],
+    isUniqueClaimer: metrics[3],
+  };
+};
+
+export const getCampaignStats = async (campaignId) => {
+  const contract = await getContract();
+  const stats = await contract.getCampaignStats(campaignId);
+  return {
+    uniqueClaimers: stats[0].toNumber(),
+    totalMinted: stats[1].toNumber(),
+    totalClaimed: stats[2].toNumber(),
+    totalBurned: stats[3].toNumber(),
+  };
+};
+
+if (typeof window !== "undefined") {
+  window.getContract = getContract;
+}
 
 // Get live campaign analytics
 export const getLiveCampaignAnalytics = async (campaignId) => {
@@ -224,74 +381,47 @@ export const getLiveCampaignAnalytics = async (campaignId) => {
     
     // Convert campaignId to number first to handle string inputs
     const numericId = Number(campaignId);
-    if (isNaN(numericId)) {
+    if (isNaN(numericId) || numericId < 0) {
       throw new Error('Invalid campaign ID');
     }
     
-    // Convert to BigInt for contract call
-    const id = ethers.toBigInt(numericId);
-    console.log('Converted ID for analytics:', id.toString());
+    // Convert to BigInt for comparison
+    const id = BigInt(numericId);
+    const total = BigInt(totalCampaigns);
     
-    if (id >= totalCampaigns) {
-      throw new Error(`Campaign ID ${id} does not exist. Total campaigns: ${totalCampaigns}`);
+    if (id >= total) {
+      throw new Error(`Campaign ID ${id} does not exist. Total campaigns: ${total}`);
     }
 
-    // First verify the campaign exists by calling getCampaignById
     try {
+      // Get campaign data
       const campaign = await contract.getCampaignById(id);
-      if (!campaign || !Array.isArray(campaign) || campaign.length === 0) {
+      if (!campaign) {
         throw new Error('Campaign not found');
       }
       console.log('Campaign verified:', campaign);
 
-      // If getCampaignStats fails, use the basic stats from getCampaignById
-      try {
-        const stats = await contract.getCampaignStats(id);
-        console.log('Raw stats:', stats);
+      // Get campaign stats
+      const stats = await contract.getCampaignStats(id);
+      console.log('Raw stats:', stats);
 
-        if (!stats || !Array.isArray(stats)) {
-          throw new Error('Invalid stats data received');
-        }
+      const analytics = {
+        uniqueClaimers: Number(stats[0]) || 0,
+        totalMinted: Number(stats[1]) || 0,
+        totalClaimed: Number(stats[2]) || 0,
+        totalBurned: Number(stats[3]) || 0,
+        claimRate: '0.0',
+        burnRate: '0.0'
+      };
 
-        const analytics = {
-          uniqueClaimers: Number(stats[0]) || 0,
-          totalMinted: Number(stats[1]) || 0,
-          totalClaimed: Number(stats[2]) || 0,
-          totalBurned: Number(stats[3]) || 0
-        };
-
-        // Calculate rates
-        if (analytics.totalMinted > 0) {
-          analytics.claimRate = ((analytics.totalClaimed / analytics.totalMinted) * 100).toFixed(1);
-          analytics.burnRate = ((analytics.totalBurned / analytics.totalMinted) * 100).toFixed(1);
-        } else {
-          analytics.claimRate = '0.0';
-          analytics.burnRate = '0.0';
-        }
-
-        console.log('Formatted analytics:', analytics);
-        return analytics;
-      } catch (statsErr) {
-        console.warn('Failed to get detailed stats, using basic stats:', statsErr);
-        // Use basic stats from campaign data
-        const basicAnalytics = {
-          uniqueClaimers: 0, // Not available in basic data
-          totalMinted: Number(campaign[7]) || 0,
-          totalClaimed: Number(campaign[8]) || 0,
-          totalBurned: Number(campaign[9]) || 0,
-          claimRate: '0.0',
-          burnRate: '0.0'
-        };
-
-        // Calculate rates
-        if (basicAnalytics.totalMinted > 0) {
-          basicAnalytics.claimRate = ((basicAnalytics.totalClaimed / basicAnalytics.totalMinted) * 100).toFixed(1);
-          basicAnalytics.burnRate = ((basicAnalytics.totalBurned / basicAnalytics.totalMinted) * 100).toFixed(1);
-        }
-
-        console.log('Using basic analytics:', basicAnalytics);
-        return basicAnalytics;
+      // Calculate rates if there are minted tokens
+      if (analytics.totalMinted > 0) {
+        analytics.claimRate = ((analytics.totalClaimed / analytics.totalMinted) * 100).toFixed(1);
+        analytics.burnRate = ((analytics.totalBurned / analytics.totalMinted) * 100).toFixed(1);
       }
+
+      console.log('Formatted analytics:', analytics);
+      return analytics;
     } catch (err) {
       console.error('Campaign verification failed:', err);
       throw new Error('Invalid campaign ID or campaign does not exist');
@@ -327,11 +457,106 @@ export const getTimeOfBurn = (timestamp) => {
   return 'evening';
 };
 
-// Mint proof NFT for a specific campaign
-export const mintProof = async (campaignId) => {
-  const contract = await getContract();
-  const [user] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-  const tx = await contract.mintProof(user, campaignId);
+// Function to get all NFTs in user's wallet
+export const getUserNFTs = async (address) => {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const contract = new ethers.Contract(contractAddress, contractABI, provider);
+  
+  // Get all NFT IDs owned by user
+  const balance = await contract.balanceOf(address);
+  const nfts = [];
+  
+  for (let i = 0; i < balance; i++) {
+    const tokenId = await contract.tokenOfOwnerByIndex(address, i);
+    const metadata = await contract.getCampaignById(tokenId);
+    nfts.push({
+      tokenId,
+      metadata
+    });
+  }
+  
+  return nfts;
+};
+
+// Share NFT data with Lit Protocol encryption
+export const shareNFTData = async (companyAddress) => {
+  try {
+    const contract = await getContract(true);
+    const userAddress = await contract.signer.getAddress();
+
+    // Get user's NFT data
+    const nftData = await getUserNFTs(userAddress);
+    
+    // Encrypt the NFT data using Lit Protocol
+    const { encryptedData, encryptedKeyStore } = await litEncrypt(nftData, contractAddress);
+    
+    // Convert data to bytes and concatenate
+    const keyStoreString = JSON.stringify(encryptedKeyStore);
+    const encodedData = new TextEncoder().encode(keyStoreString + encryptedData);
+
+    // Share the encrypted data
+    const tx = await contract.shareData(companyAddress, encodedData);
+    await tx.wait();
+
+    // Pay the user their reward
+    await payUserReward(userAddress, companyAddress);
+
+    return tx;
+  } catch (error) {
+    console.error('Error sharing NFT data:', error);
+    throw error;
+  }
+};
+
+// Function for Perky to pay user reward
+export const payUserReward = async (userAddress, companyAddress) => {
+  const contract = await getContract(true);
+  
+  // Ensure caller is Perky wallet
+  const signer = await contract.signer.getAddress();
+  const perkyWallet = await contract.perkyWallet();
+  
+  if (signer !== perkyWallet) {
+    throw new Error("Only Perky wallet can pay rewards");
+  }
+  
+  // Pay 1 XRP to user
+  const tx = await contract.payUserReward(
+    userAddress,
+    companyAddress,
+    {
+      value: ethers.parseEther("1.0")
+    }
+  );
+  
   await tx.wait();
-  return tx.hash;
+  return tx;
+};
+
+// Get shared user data with Lit Protocol decryption
+export const getSharedUserData = async (userAddress) => {
+  try {
+    const contract = await getContract(true);
+    const encryptedPackage = await contract.getSharedData(userAddress);
+    
+    if (!encryptedPackage || encryptedPackage === '0x') {
+      return null;
+    }
+
+    // Decode the data
+    const decoder = new TextDecoder();
+    const decodedData = decoder.decode(encryptedPackage);
+    
+    // Split into keyStore and encrypted data
+    const separatorIndex = decodedData.indexOf('}') + 1;
+    const keyStore = JSON.parse(decodedData.slice(0, separatorIndex));
+    const encryptedData = decodedData.slice(separatorIndex);
+
+    // Decrypt the data using Lit Protocol
+    const decryptedData = await litDecrypt(encryptedData, keyStore, contractAddress);
+    return decryptedData;
+  } catch (error) {
+    console.error('Error getting shared data:', error);
+    throw error;
+  }
 };
