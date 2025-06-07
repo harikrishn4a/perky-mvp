@@ -35,4 +35,4 @@ frontend/.cache/
 frontend/node_modules/.cache/
 
 # Mac
-.DS_Store 
+.DS_Store frontend/node_modules/
