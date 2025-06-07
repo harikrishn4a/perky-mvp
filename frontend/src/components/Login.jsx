@@ -1,49 +1,51 @@
-'use client'
 
 import React, { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/app/context/AuthContext';
-import Link from 'next/link';
-import '@/app/styles/Login.css';
+import { ethers } from 'ethers';
+import './Login.css';
 
 
 
 
-export default function Login () {
-  /*const [alias, setAlias] = useState('');
-  const [colourPalette, setColourPalette] = useState('NORMAL');
-  const [dateFormat, setDateFormat] = useState('standard');*/
-  //const [username, setUsername] = useState('');
+export default function WalletLogin () {
+ 
   const container = useRef(null);
 
+  const [walletAddress, setWalletAddress] = useState('');
   const auth = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isRegister, setIsRegister] = useState(false);
+  const [isCompany, setIsCompany] = useState(false);
   const [authenticating, setAuthenticating] = useState(false);
 
   const { signup, login } = useAuth()
 
-  async function handleSubmit() {
-        if (!email || !password || password.length < 6) {
-            return
-        }
-        setAuthenticating(true)
-        try {
-            if (isRegister) {
-                console.log('Signing up a new user')
-                await signup(email, password)
-            } else {
-                console.log('Logging in existing user')
-                await login(email, password)
-            }
+  async function connectWallet() {
+    if (typeof window.ethereum === 'undefined') {
+      alert("MetaMask not detected!");
+      return;
+    }
 
-        } catch (err) {
-            console.log(err.message)
-        } finally {
-            setAuthenticating(false)
-        }
-}
+    setAuthenticating(true);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      // (Optional) Sign a message for authentication
+      const signature = await signer.signMessage("Login to StudyApp");
+      console.log('Signature:', signature);
+
+      setWalletAddress(address);
+      localStorage.setItem('walletAddress', address);
+      alert(`Wallet connected: ${address}`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to connect wallet");
+    } finally {
+      setAuthenticating(false);
+    }
+  }
 
 
   const navigate = useRouter();
@@ -58,6 +60,7 @@ export default function Login () {
       setEmail('');
       setPassword('');
       container.current.classList.remove('active');
+      setIsCompany(false);
     }
   }
 
@@ -67,6 +70,7 @@ export default function Login () {
       setEmail('');
       setPassword('');
       container.current.classList.add('active');
+      setIsCompany(true);
     }
   }
 
