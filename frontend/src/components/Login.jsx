@@ -50,15 +50,10 @@ export default function WalletLogin () {
 
   const navigate = useRouter();
 
-  //const handleUsernameChange = (event) => setUsername(event.target.value);
-  const handleEmailChange = (event) => setEmail(event.target.value);
-  const handlePasswordChange = (event) => setPassword(event.target.value);
 
   function toggleLeft() {
    
     if (container.current) {
-      setEmail('');
-      setPassword('');
       container.current.classList.remove('active');
       setIsCompany(false);
     }
@@ -67,8 +62,6 @@ export default function WalletLogin () {
   function toggleRight() {
     
     if (container.current) {
-      setEmail('');
-      setPassword('');
       container.current.classList.add('active');
       setIsCompany(true);
     }
@@ -81,7 +74,7 @@ export default function WalletLogin () {
         <div className="form-container sign-up">
           <form>
             <img className="logo" src='../g851.png' alt="Icon" />
-            <h1>Create Account</h1>
+            <h1>Company Sign-In</h1>
             {/*<input
               type="text"
               value={username}
@@ -100,14 +93,14 @@ export default function WalletLogin () {
               onChange={(e) => {setPassword(e.target.value)}}
               placeholder="Password"
             />
-            <button type="button" onClick={handleSubmit}>Sign Up</button>
+            <button type="button" onClick={handleSubmit}>Sign In</button>
           </form>
         </div>
 
         <div className="form-container sign-in">
           <form>
             <img className="logo" src="../g851.png" alt="oth Icon" />
-            <h1>Sign In</h1>
+            <h1>User Sign In</h1>
              <input
               type="email"
               value={email}
@@ -128,17 +121,17 @@ export default function WalletLogin () {
         <div className="toggle-container">
           <div className="toggle">
             <div className="toggle-panel toggle-left" id="toggle left">
-              <h1>Welcome Back!</h1>
-              <p>Continue studying with ease.</p>
+              <h1>Welcome!</h1>
+              <p>Get secure insider access to your favourite products, with Perky.</p>
               <button type="button" className="block" id="login" onClick={() => {toggleLeft(); setIsRegister(!isRegister)}}>
-                Back to Sign In
+                User Sign-In
               </button>
             </div>
             <div className="toggle-panel toggle-right" id="toggle right">
-              <h1>Hey There!</h1>
-              <p>Register to transform your study experience, on the house.</p>
+              <h1>Need to push personalised advertising?</h1>
+              <p>Register to be part of the future of marketing analytics with Perky.</p>
               <button type="button" className="block" id="register" onClick={() => { toggleRight(); setIsRegister(!isRegister)}}>
-                Sign Up
+                Company Sign-In
               </button>
             </div>
           </div>
