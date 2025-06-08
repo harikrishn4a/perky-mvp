@@ -6,7 +6,7 @@ Each component is optimized for consent-based marketing, wallet-native personali
 
 ---
 
-🛠 Contract 1: CampaignNFT.sol  
+## 🛠 Contract 1: CampaignNFT.sol  
 **Purpose:**  
 Mints ERC-1155 NFTs representing user interactions with a campaign, with encrypted metadata stored on IPFS.
 
@@ -27,7 +27,7 @@ Assigns minting rights to the Router contract post-deployment.
 
 ---
 
-🛠 Contract 2: CampaignRouter.sol  
+## 🛠 Contract 2: CampaignRouter.sol  
 **Purpose:**  
 Handles mint logic, campaign creation, and opt-in decryption workflows.
 
@@ -47,7 +47,7 @@ Verifies user consent and decrypts NFT metadata.
 
 ---
 
-🔒 Key Security Features  
+## 🔒 Key Security Features  
 **Encrypted Metadata:**  
 User data is never publicly visible or accessible without opt-in.
 
@@ -62,7 +62,7 @@ Admin roles can update metadata handlers or contract logic without full redeploy
 
 ---
 
-🔗 System Interaction Flow  
+## 🔗 System Interaction Flow  
 1. User mints a campaign NFT after scanning a QR or visiting a venue.  
 2. NFT metadata is encrypted and stored on IPFS.  
 3. User views their encrypted NFT in wallet.  
@@ -72,7 +72,7 @@ Admin roles can update metadata handlers or contract logic without full redeploy
 
 ---
 
-✅ Final Summary  
+## ✅ Final Summary  
 Perky is a fully on-chain loyalty and targeting engine built on XRPL EVM. It ensures that user data stays private until willingly shared, while still enabling businesses to personalize outreach and reward loyalty — all without cookies.
 
 ---
