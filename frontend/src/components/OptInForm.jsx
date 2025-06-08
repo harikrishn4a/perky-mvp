@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { contractABI, contractAddress } from '../utils/constants';
 
-const OptInForm = ({ onClose }) => {
+const OptInForm = ({ onClose, campaignId }) => {
   const [formData, setFormData] = useState({
     email: '',
     phone: '',
@@ -14,6 +14,35 @@ const OptInForm = ({ onClose }) => {
   });
   const [status, setStatus] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [hasShared, setHasShared] = useState(false);
+
+  useEffect(() => {
+    const checkExistingPreferences = async () => {
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const walletAddress = await signer.getAddress();
+
+        const response = await fetch(
+          `http://localhost:3000/api/preferences?walletAddress=${walletAddress}&campaignId=${campaignId}`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.hasShared) {
+            setHasShared(true);
+            setStatus('You have already shared your preferences for this campaign.');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking preferences:', error);
+      }
+    };
+
+    if (campaignId) {
+      checkExistingPreferences();
+    }
+  }, [campaignId]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -85,12 +114,14 @@ const OptInForm = ({ onClose }) => {
         },
         body: JSON.stringify({
           ...formData,
-          walletAddress
+          walletAddress,
+          campaignId
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save preferences');
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save preferences');
       }
 
       // Then send XRP reward
@@ -106,6 +137,27 @@ const OptInForm = ({ onClose }) => {
       setIsProcessing(false);
     }
   };
+
+  if (hasShared) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg p-6 max-w-md w-full">
+          <h2 className="text-2xl font-bold mb-4">Already Shared</h2>
+          <p className="text-gray-600 mb-4">
+            You have already shared your preferences and received rewards for this campaign.
+          </p>
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
