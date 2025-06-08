@@ -2,7 +2,7 @@
 Perky leverages a multi-contract modular system to mint encrypted loyalty NFTs on the XRPL EVM Sidechain. Users can collect interest-based NFTs and choose to decrypt them in exchange for XRP rewards.
 
 Each component is optimized for consent-based marketing, wallet-native personalization, and flexible data sharing — without using third-party cookies.
-<video src="media/demo.mp4" controls="controls" width="100%"></video>
+🎥 [Watch the demo video](media/demo.mp4)
 <p float="left">
   <img src="media/Screenshot 1.png" width="32%" />
   <img src="media/Screenshot 2.png" width="32%" />
