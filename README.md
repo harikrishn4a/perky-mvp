@@ -84,7 +84,6 @@ Perky is a fully on-chain loyalty and targeting engine built on XRPL EVM. It ens
 
 ---
 
-Blocklink : https://evm-sidechain.xrpl.org/ (placeholder)  
-Website has been published at : https://perkyapp.xyz (placeholder)  
+Blocklink : https://evm-sidechain.xrpl.org/ 
 Presentation slides : https://www.canva.com/design/DAGpqqppJB8/GD6iaFfLDvULKUcZwKaHxw/view?utm_content=DAGpqqppJB8&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h6e2c7072ca  
 Twitter thread : https://x.com/kwp32236447/status/1931549188644651364
